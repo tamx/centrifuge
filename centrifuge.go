@@ -33,6 +33,7 @@ func (k myKey) Less(i, j int) bool {
 }
 
 var centrifuge map[string]myCentrifuge
+var orderedKey myKey
 
 func main() {
 	centrifuge = make(map[string]myCentrifuge)
@@ -63,6 +64,12 @@ func main() {
 			centrifuge[""] = tmp
 		}
 	}
+	orderedKey = myKey{}
+	for key := range centrifuge {
+		orderedKey = append(orderedKey, key)
+	}
+	sort.Sort(orderedKey)
+
 	ssl := false
 	listenport := *port
 	if strings.HasSuffix(listenport, "/ssl") {
@@ -143,11 +150,6 @@ func handleClient(conn net.Conn) {
 	}
 
 	message := string(messageBuf[:messageLen])
-	orderedKey := myKey{}
-	for key := range centrifuge {
-		orderedKey = append(orderedKey, key)
-	}
-	sort.Sort(orderedKey)
 	for _, key := range orderedKey {
 		value := centrifuge[key].serverport
 		sslflag := centrifuge[key].sslflag
