@@ -158,11 +158,15 @@ func handleClient(conn net.Conn) {
 				config := &tls.Config{InsecureSkipVerify: true}
 				server, err := tls.Dial("tcp", value, config)
 				checkError(err)
-				handleToServer(messageBuf[:messageLen], conn, server)
+				if err == nil {
+					handleToServer(messageBuf[:messageLen], conn, server)
+				}
 			} else {
 				server, err := net.Dial("tcp", value)
 				checkError(err)
-				handleToServer(messageBuf[:messageLen], conn, server)
+				if err == nil {
+					handleToServer(messageBuf[:messageLen], conn, server)
+				}
 			}
 			return
 		}
@@ -171,6 +175,6 @@ func handleClient(conn net.Conn) {
 
 func checkError(err error) {
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "fatal: error: %s", err.Error())
+		fmt.Fprintf(os.Stderr, "fatal: error: %s\n", err.Error())
 	}
 }
