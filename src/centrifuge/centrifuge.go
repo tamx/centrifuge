@@ -16,6 +16,7 @@ import (
 type myCentrifuge struct {
 	serverport string
 	sslflag    bool
+	httpflag	bool
 }
 
 type myKey []string
@@ -51,6 +52,11 @@ func main() {
 			ssl = true
 			param = param[0 : len(param)-4]
 		}
+		httpflag := false
+		if strings.HasSuffix(param, "/http") {
+			httpflag = true
+			param = param[0 : len(param)-5]
+		}
 		params := strings.Split(param, ":")
 		if len(params) <= 1 {
 			fmt.Println("Error: " + param)
@@ -59,10 +65,10 @@ func main() {
 			fmt.Println("Error: " + param)
 			return
 		} else if len(params) == 3 {
-			tmp := myCentrifuge{params[1] + ":" + params[2], ssl}
+			tmp := myCentrifuge{params[1] + ":" + params[2], ssl, httpflag}
 			centrifuge[params[0]] = tmp
 		} else if len(params) == 2 {
-			tmp := myCentrifuge{params[0] + ":" + params[1], ssl}
+			tmp := myCentrifuge{params[0] + ":" + params[1], ssl, httpflag}
 			centrifuge[""] = tmp
 		}
 	}
@@ -145,8 +151,18 @@ func pipe(reader net.Conn, writer net.Conn) {
 	}
 }
 
-func handleToServer(header []byte, conn net.Conn, server net.Conn) {
-	server.Write(header)
+func handleToServer(header []byte, conn net.Conn, server net.Conn, httpflag bool) {
+	if httpflag {
+		i := 0
+		for ;header[i]!='\n';i++{}
+		i++
+		server.Write(header[:i])
+		address := conn.RemoteAddr().String()
+		server.Write([]byte("X-Forwarded-For: "+address+"\n"))
+		server.Write(header[i:])
+	}else{
+		server.Write(header)
+	}
 
 	go pipe(server, conn)
 	go pipe(conn, server)
@@ -166,18 +182,19 @@ func handleClient(conn net.Conn) {
 		value := centrifuge[key].serverport
 		sslflag := centrifuge[key].sslflag
 		if strings.HasPrefix(message, key) {
+			httpflag := centrifuge[key].httpflag
 			if sslflag {
 				config := &tls.Config{InsecureSkipVerify: true}
 				server, err := tls.Dial("tcp", value, config)
 				checkError(err)
 				if err == nil {
-					handleToServer(messageBuf[:messageLen], conn, server)
+					handleToServer(messageBuf[:messageLen], conn, server, httpflag)
 				}
 			} else {
 				server, err := net.Dial("tcp", value)
 				checkError(err)
 				if err == nil {
-					handleToServer(messageBuf[:messageLen], conn, server)
+					handleToServer(messageBuf[:messageLen], conn, server, httpflag)
 				}
 			}
 			return
