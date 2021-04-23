@@ -4,6 +4,7 @@ import (
 	"crypto/tls"
 	"flag"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"os"
@@ -16,7 +17,7 @@ import (
 type myCentrifuge struct {
 	serverport string
 	sslflag    bool
-	httpflag	bool
+	httpflag   bool
 }
 
 type myKey []string
@@ -137,40 +138,31 @@ func main() {
 	}
 }
 
-func pipe(reader net.Conn, writer net.Conn) {
-	defer writer.Close()
-	defer reader.Close()
-
-	messageBuf := make([]byte, 1024)
-	for {
-		messageLen, err := reader.Read(messageBuf)
-		if err != nil {
-			break
-		}
-		writer.Write(messageBuf[:messageLen])
-	}
-}
-
 func handleToServer(header []byte, conn net.Conn, server net.Conn, httpflag bool) {
+	defer conn.Close()
+	defer server.Close()
 	if httpflag {
 		i := 0
-		for ;header[i]!='\n';i++{}
+		for ; header[i] != '\n'; i++ {
+		}
 		i++
 		server.Write(header[:i])
 		address := conn.RemoteAddr().String()
 		index := strings.Index(address, ":")
 		address = address[:index]
-		server.Write([]byte("X-Forwarded-For: "+address+"\r\n"))
+		server.Write([]byte("X-Forwarded-For: " + address + "\r\n"))
 		server.Write(header[i:])
-	}else{
+	} else {
 		server.Write(header)
 	}
 
-	go pipe(server, conn)
-	go pipe(conn, server)
+	go io.Copy(server, conn)
+	io.Copy(conn, server)
 }
 
 func handleClient(conn net.Conn) {
+	defer conn.Close()
+
 	messageBuf := make([]byte, 1024)
 	messageLen, err := conn.Read(messageBuf)
 	checkError(err)
@@ -180,11 +172,15 @@ func handleClient(conn net.Conn) {
 	}
 
 	message := string(messageBuf[:messageLen])
+	// fmt.Println(message)
 	for _, key := range orderedKey {
-		value := centrifuge[key].serverport
-		sslflag := centrifuge[key].sslflag
+		// fmt.Println(key)
 		if strings.HasPrefix(message, key) {
+			value := centrifuge[key].serverport
+			sslflag := centrifuge[key].sslflag
 			httpflag := centrifuge[key].httpflag
+			// fmt.Println(key)
+			// fmt.Println(value)
 			if sslflag {
 				config := &tls.Config{InsecureSkipVerify: true}
 				server, err := tls.Dial("tcp", value, config)
