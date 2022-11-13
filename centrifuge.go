@@ -138,26 +138,40 @@ func main() {
 	}
 }
 
-func handleToServer(header []byte, conn net.Conn, server net.Conn, httpflag bool) {
+func handleToServer(header []byte,
+	conn net.Conn, server net.Conn, httpflag bool) {
 	defer conn.Close()
 	defer server.Close()
 	if httpflag {
 		i := 0
-		for ; header[i] != '\n'; i++ {
+		for ; i < len(header) &&
+			header[i] != '\n'; i++ {
 		}
 		i++
 		server.Write(header[:i])
 		address := conn.RemoteAddr().String()
 		index := strings.Index(address, ":")
 		address = address[:index]
-		server.Write([]byte("X-Forwarded-For: " + address + "\r\n"))
-		server.Write(header[i:])
+		server.Write([]byte("X-Forwarded-For: " +
+			address + "\r\n"))
+		if i < len(header) {
+			server.Write(header[i:])
+		}
 	} else {
 		server.Write(header)
 	}
 
-	go io.Copy(server, conn)
-	io.Copy(conn, server)
+	ch := make(chan int)
+	go func() {
+		io.Copy(server, conn)
+		ch <- 0
+	}()
+	go func() {
+		io.Copy(conn, server)
+		ch <- 0
+	}()
+	<-ch
+	<-ch
 }
 
 func handleClient(conn net.Conn) {
