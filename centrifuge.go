@@ -143,20 +143,14 @@ func handleToServer(header []byte,
 	defer conn.Close()
 	defer server.Close()
 	if httpflag {
-		i := 0
-		for ; i < len(header) &&
-			header[i] != '\n'; i++ {
-		}
-		i++
+		i := strings.Index(string(header), "\n") + 1
 		server.Write(header[:i])
 		address := conn.RemoteAddr().String()
 		index := strings.Index(address, ":")
 		address = address[:index]
 		server.Write([]byte("X-Forwarded-For: " +
 			address + "\r\n"))
-		if i < len(header) {
-			server.Write(header[i:])
-		}
+		server.Write(header[i:])
 	} else {
 		server.Write(header)
 	}
