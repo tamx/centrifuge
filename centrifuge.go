@@ -37,14 +37,26 @@ func (k myKey) Less(i, j int) bool {
 	return len(k[i]) > len(k[j])
 }
 
+type arrayFlags []string
+
+func (i *arrayFlags) String() string {
+	return "my string representation"
+}
+
+func (i *arrayFlags) Set(value string) error {
+	*i = append(*i, value)
+	return nil
+}
+
 var centrifuge map[string]myCentrifuge
 var orderedKey myKey
 
 func main() {
 	centrifuge = make(map[string]myCentrifuge)
+	var hostnameArray arrayFlags
 
 	port := flag.String("p", "0.0.0.0:443/ssl", "listen port")
-	hostname := flag.String("n", "example.com", "host name")
+	flag.Var(&hostnameArray, "n", "host name")
 	flag.Parse()
 
 	for _, param := range flag.Args() {
@@ -66,10 +78,12 @@ func main() {
 			fmt.Println("Error: " + param)
 			return
 		} else if len(params) == 3 {
-			tmp := myCentrifuge{params[1] + ":" + params[2], ssl, httpflag}
+			tmp := myCentrifuge{params[1] + ":" + params[2],
+				ssl, httpflag}
 			centrifuge[params[0]] = tmp
 		} else if len(params) == 2 {
-			tmp := myCentrifuge{params[0] + ":" + params[1], ssl, httpflag}
+			tmp := myCentrifuge{params[0] + ":" + params[1],
+				ssl, httpflag}
 			centrifuge[""] = tmp
 		}
 	}
@@ -88,9 +102,9 @@ func main() {
 
 	if ssl {
 		certManager := autocert.Manager{
-			Prompt:     autocert.AcceptTOS,                // Let's Encryptの利用規約への同意
-			HostPolicy: autocert.HostWhitelist(*hostname), // ドメイン名
-			Cache:      autocert.DirCache("certs"),        // 証明書などを保存するフォルダ
+			Prompt:     autocert.AcceptTOS,                       // Let's Encryptの利用規約への同意
+			HostPolicy: autocert.HostWhitelist(hostnameArray...), // ドメイン名
+			Cache:      autocert.DirCache("certs"),               // 証明書などを保存するフォルダ
 		}
 
 		// http-01 Challenge(ドメインの所有確認)、HTTPSへのリダイレクト用のサーバー
