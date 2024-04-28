@@ -8,7 +8,6 @@ import (
 	"net"
 	"net/http"
 	"os"
-	"sort"
 	"strings"
 
 	"golang.org/x/crypto/acme/autocert"
@@ -20,22 +19,22 @@ type myCentrifuge struct {
 	httpflag   bool
 }
 
-type myKey []string
+// type myKey []string
 
-func (k myKey) Len() int {
-	return len(k)
-}
+// func (k myKey) Len() int {
+// 	return len(k)
+// }
 
-func (k myKey) Swap(i, j int) {
-	k[i], k[j] = k[j], k[i]
-}
+// func (k myKey) Swap(i, j int) {
+// 	k[i], k[j] = k[j], k[i]
+// }
 
-func (k myKey) Less(i, j int) bool {
-	if len(k[i]) == len(k[j]) {
-		return k[i] > k[j]
-	}
-	return len(k[i]) > len(k[j])
-}
+// func (k myKey) Less(i, j int) bool {
+// 	if len(k[i]) == len(k[j]) {
+// 		return k[i] > k[j]
+// 	}
+// 	return len(k[i]) > len(k[j])
+// }
 
 type arrayFlags []string
 
@@ -49,7 +48,8 @@ func (i *arrayFlags) Set(value string) error {
 }
 
 var centrifuge map[string]myCentrifuge
-var orderedKey myKey
+
+// var orderedKey myKey
 
 func main() {
 	centrifuge = make(map[string]myCentrifuge)
@@ -87,11 +87,11 @@ func main() {
 			centrifuge[""] = tmp
 		}
 	}
-	orderedKey = myKey{}
-	for key := range centrifuge {
-		orderedKey = append(orderedKey, key)
-	}
-	sort.Sort(orderedKey)
+	// orderedKey = myKey{}
+	// for key := range centrifuge {
+	// 	orderedKey = append(orderedKey, key)
+	// }
+	// sort.Sort(orderedKey)
 
 	ssl := false
 	listenport := *port
@@ -195,29 +195,35 @@ func handleClient(conn net.Conn) {
 
 	message := string(messageBuf[:messageLen])
 	// fmt.Println(message)
-	for _, key := range orderedKey {
-		// fmt.Println(key)
-		if strings.HasPrefix(message, key) {
-			value := centrifuge[key].serverport
-			sslflag := centrifuge[key].sslflag
-			httpflag := centrifuge[key].httpflag
-			// fmt.Println(key)
-			// fmt.Println(value)
-			if sslflag {
-				config := &tls.Config{InsecureSkipVerify: true}
-				server, err := tls.Dial("tcp", value, config)
-				checkError(err)
-				if err == nil {
-					handleToServer(messageBuf[:messageLen], conn, server, httpflag)
-				}
-			} else {
-				server, err := net.Dial("tcp", value)
-				checkError(err)
-				if err == nil {
-					handleToServer(messageBuf[:messageLen], conn, server, httpflag)
-				}
-			}
-			return
+	key := ""
+	for k := range centrifuge {
+		if len(k) <= len(key) {
+			continue
+		}
+		if strings.HasPrefix(message, k) {
+			key = k
+		}
+	}
+	// fmt.Println(key)
+	value := centrifuge[key].serverport
+	sslflag := centrifuge[key].sslflag
+	httpflag := centrifuge[key].httpflag
+	// fmt.Println(key)
+	// fmt.Println(value)
+	if sslflag {
+		config := &tls.Config{InsecureSkipVerify: true}
+		server, err := tls.Dial("tcp", value, config)
+		checkError(err)
+		if err == nil {
+			handleToServer(messageBuf[:messageLen],
+				conn, server, httpflag)
+		}
+	} else {
+		server, err := net.Dial("tcp", value)
+		checkError(err)
+		if err == nil {
+			handleToServer(messageBuf[:messageLen],
+				conn, server, httpflag)
 		}
 	}
 }
