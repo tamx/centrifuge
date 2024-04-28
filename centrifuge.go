@@ -19,22 +19,7 @@ type myCentrifuge struct {
 	httpflag   bool
 }
 
-// type myKey []string
-
-// func (k myKey) Len() int {
-// 	return len(k)
-// }
-
-// func (k myKey) Swap(i, j int) {
-// 	k[i], k[j] = k[j], k[i]
-// }
-
-// func (k myKey) Less(i, j int) bool {
-// 	if len(k[i]) == len(k[j]) {
-// 		return k[i] > k[j]
-// 	}
-// 	return len(k[i]) > len(k[j])
-// }
+var centrifuge map[string]myCentrifuge
 
 type arrayFlags []string
 
@@ -46,10 +31,6 @@ func (i *arrayFlags) Set(value string) error {
 	*i = append(*i, value)
 	return nil
 }
-
-var centrifuge map[string]myCentrifuge
-
-// var orderedKey myKey
 
 func main() {
 	centrifuge = make(map[string]myCentrifuge)
@@ -87,11 +68,6 @@ func main() {
 			centrifuge[""] = tmp
 		}
 	}
-	// orderedKey = myKey{}
-	// for key := range centrifuge {
-	// 	orderedKey = append(orderedKey, key)
-	// }
-	// sort.Sort(orderedKey)
 
 	ssl := false
 	listenport := *port
