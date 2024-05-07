@@ -2,6 +2,7 @@ package main
 
 import (
 	"crypto/tls"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -19,7 +20,43 @@ type myCentrifuge struct {
 	httpflag   bool
 }
 
-var centrifuge map[string]myCentrifuge
+var centrifuge map[string]map[string]myCentrifuge
+
+func parseCentrifuge(param string) error {
+	ssl := false
+	if strings.HasSuffix(param, "/ssl") {
+		ssl = true
+		param = param[0 : len(param)-4]
+	}
+	httpflag := false
+	if strings.HasSuffix(param, "/http") {
+		httpflag = true
+		param = param[0 : len(param)-5]
+	}
+	params := strings.Split(param, ":")
+	if len(params) <= 1 {
+		return errors.New("parameter error")
+	} else if len(params) > 4 {
+		return errors.New("parameter error")
+	} else if len(params) == 4 {
+		domain := params[0]
+		tmp := myCentrifuge{params[2] + ":" + params[3],
+			ssl, httpflag}
+		if centrifuge[domain] == nil {
+			centrifuge[domain] = map[string]myCentrifuge{}
+		}
+		centrifuge[domain][params[1]] = tmp
+	} else if len(params) == 3 {
+		tmp := myCentrifuge{params[1] + ":" + params[2],
+			ssl, httpflag}
+		centrifuge[""][params[0]] = tmp
+	} else if len(params) == 2 {
+		tmp := myCentrifuge{params[0] + ":" + params[1],
+			ssl, httpflag}
+		centrifuge[""][""] = tmp
+	}
+	return nil
+}
 
 type arrayFlags []string
 
@@ -33,7 +70,8 @@ func (i *arrayFlags) Set(value string) error {
 }
 
 func main() {
-	centrifuge = make(map[string]myCentrifuge)
+	centrifuge = map[string]map[string]myCentrifuge{}
+	centrifuge[""] = map[string]myCentrifuge{}
 	var hostnameArray arrayFlags
 
 	port := flag.String("p", "0.0.0.0:443/ssl", "listen port")
@@ -41,31 +79,9 @@ func main() {
 	flag.Parse()
 
 	for _, param := range flag.Args() {
-		ssl := false
-		if strings.HasSuffix(param, "/ssl") {
-			ssl = true
-			param = param[0 : len(param)-4]
-		}
-		httpflag := false
-		if strings.HasSuffix(param, "/http") {
-			httpflag = true
-			param = param[0 : len(param)-5]
-		}
-		params := strings.Split(param, ":")
-		if len(params) <= 1 {
+		if err := parseCentrifuge(param); err != nil {
 			fmt.Println("Error: " + param)
 			return
-		} else if len(params) > 3 {
-			fmt.Println("Error: " + param)
-			return
-		} else if len(params) == 3 {
-			tmp := myCentrifuge{params[1] + ":" + params[2],
-				ssl, httpflag}
-			centrifuge[params[0]] = tmp
-		} else if len(params) == 2 {
-			tmp := myCentrifuge{params[0] + ":" + params[1],
-				ssl, httpflag}
-			centrifuge[""] = tmp
 		}
 	}
 
@@ -171,8 +187,17 @@ func handleClient(conn net.Conn) {
 
 	message := string(messageBuf[:messageLen])
 	// fmt.Println(message)
+	domain := ""
+	if sslConn, ok := conn.(*tls.Conn); ok {
+		domain = sslConn.ConnectionState().ServerName
+	}
+	// fmt.Println(domain)
+	choice := centrifuge[domain]
+	if choice == nil {
+		choice = centrifuge[""]
+	}
 	key := ""
-	for k := range centrifuge {
+	for k := range choice {
 		if len(k) <= len(key) {
 			continue
 		}
@@ -181,9 +206,9 @@ func handleClient(conn net.Conn) {
 		}
 	}
 	// fmt.Println(key)
-	value := centrifuge[key].serverport
-	sslflag := centrifuge[key].sslflag
-	httpflag := centrifuge[key].httpflag
+	value := choice[key].serverport
+	sslflag := choice[key].sslflag
+	httpflag := choice[key].httpflag
 	// fmt.Println(key)
 	// fmt.Println(value)
 	if sslflag {
