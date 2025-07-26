@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"time"
 
 	"golang.org/x/crypto/acme/autocert"
 )
@@ -144,10 +145,27 @@ func main() {
 	}
 }
 
+func SetKeepAlive(conn net.Conn) error {
+	tcpConn, ok := conn.(*net.TCPConn)
+	if !ok {
+		return errors.New("error: not *net.TCPConn")
+	}
+	// Set Keep-Alive
+	if err := tcpConn.SetKeepAlive(true); err != nil {
+		return err
+	}
+	if err := tcpConn.SetKeepAlivePeriod(10 * time.Second); err != nil {
+		return err
+	}
+	return nil
+}
+
 func handleToServer(header []byte,
 	conn net.Conn, server net.Conn, httpflag bool) {
 	defer conn.Close()
 	defer server.Close()
+	SetKeepAlive(conn)
+	SetKeepAlive(server)
 	if httpflag {
 		i := strings.Index(string(header), "\n") + 1
 		server.Write(header[:i])
