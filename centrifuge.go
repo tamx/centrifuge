@@ -127,7 +127,12 @@ func main() {
 			go handleClient(conn)
 		}
 	} else {
-		ln, err := net.Listen("tcp", listenport)
+		tcpAddr, err := net.ResolveTCPAddr("tcp", listenport)
+		if err != nil {
+			checkError(err)
+			return
+		}
+		ln, err := net.ListenTCP("tcp", tcpAddr)
 		if err != nil {
 			checkError(err)
 			return
@@ -135,7 +140,7 @@ func main() {
 		defer ln.Close()
 
 		for {
-			conn, err := ln.Accept()
+			conn, err := ln.AcceptTCP()
 			if err != nil {
 				checkError(err)
 				continue
@@ -145,16 +150,12 @@ func main() {
 	}
 }
 
-func SetKeepAlive(conn net.Conn) error {
-	tcpConn, ok := conn.(*net.TCPConn)
-	if !ok {
-		return errors.New("error: not *net.TCPConn")
-	}
+func SetKeepAlive(conn *net.TCPConn) error {
 	// Set Keep-Alive
-	if err := tcpConn.SetKeepAlive(true); err != nil {
+	if err := conn.SetKeepAlive(true); err != nil {
 		return err
 	}
-	if err := tcpConn.SetKeepAlivePeriod(10 * time.Second); err != nil {
+	if err := conn.SetKeepAlivePeriod(10 * time.Second); err != nil {
 		return err
 	}
 	return nil
@@ -164,8 +165,12 @@ func handleToServer(header []byte,
 	conn net.Conn, server net.Conn, httpflag bool) {
 	defer conn.Close()
 	defer server.Close()
-	SetKeepAlive(conn)
-	SetKeepAlive(server)
+	if tcpConn, okConn := conn.(*net.TCPConn); okConn {
+		SetKeepAlive(tcpConn)
+	}
+	if tcpServer, okServer := server.(*net.TCPConn); okServer {
+		SetKeepAlive(tcpServer)
+	}
 	if httpflag {
 		i := strings.Index(string(header), "\n") + 1
 		server.Write(header[:i])
@@ -181,10 +186,28 @@ func handleToServer(header []byte,
 
 	ch := make(chan int)
 	go func() {
+		if tcpConn, okConn := conn.(*net.TCPConn); okConn {
+			defer tcpConn.CloseRead()
+		}
+		if tcpServer, okServer := server.(*net.TCPConn); okServer {
+			defer tcpServer.CloseWrite()
+		}
+		if sslConn, ok := net.Conn(server).(*tls.Conn); ok {
+			defer sslConn.CloseWrite()
+		}
 		io.Copy(server, conn)
 		ch <- 0
 	}()
 	go func() {
+		if tcpServer, okServer := server.(*net.TCPConn); okServer {
+			defer tcpServer.CloseRead()
+		}
+		if tcpConn, okConn := conn.(*net.TCPConn); okConn {
+			defer tcpConn.CloseWrite()
+		}
+		if sslConn, ok := net.Conn(conn).(*tls.Conn); ok {
+			defer sslConn.CloseWrite()
+		}
 		io.Copy(conn, server)
 		ch <- 0
 	}()
@@ -206,7 +229,7 @@ func handleClient(conn net.Conn) {
 	message := string(messageBuf[:messageLen])
 	// fmt.Println(message)
 	domain := ""
-	if sslConn, ok := conn.(*tls.Conn); ok {
+	if sslConn, ok := net.Conn(conn).(*tls.Conn); ok {
 		domain = sslConn.ConnectionState().ServerName
 	}
 	// fmt.Println(domain)
@@ -238,7 +261,12 @@ func handleClient(conn net.Conn) {
 				conn, server, httpflag)
 		}
 	} else {
-		server, err := net.Dial("tcp", value)
+		tcpAddr, err := net.ResolveTCPAddr("tcp", value)
+		if err != nil {
+			println("net resolve TCP Addr error ")
+			return
+		}
+		server, err := net.DialTCP("tcp", nil, tcpAddr)
 		checkError(err)
 		if err == nil {
 			handleToServer(messageBuf[:messageLen],
